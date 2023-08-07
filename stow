@@ -5,18 +5,21 @@ import collections
 import argparse
 
 parser=argparse.ArgumentParser(description="Link the contents in SOURCE to TARGET")
+install_group=parser.add_mutually_exclusive_group()
+install_group.add_argument("-S","--install",dest="install",default=True,action="store_true",help="Install package")
+install_group.add_argument("-D","--uninstall",dest="uninstall",default=False,action="store_true",help="Uninstall package")
 parser.add_argument("source",metavar="SOURCE",nargs="?",help="Directory where contents will be linked from",default=os.getcwd())
-parser.add_argument("-t","--target",help="Directory where contents will be linked to")
+parser.add_argument("-t","--target",nargs="?",default="~",help="Directory where contents will be linked to")
 parser.add_argument("-d","--dry-run",help="Don't change filesystem, only print what will happen",action="store_true")
-parser.add_argument("-f","--force",help="Force symlink every file and directory. Do not skip linking for any inode.",action="store_true")
+parser.add_argument("-f","--force",help="Force symlink every file and directory. Do not skip linking for any inode.",action="store_true",default=False)
 args=parser.parse_args()
 
 source=args.source
-
 target=args.target
 dry_run=args.dry_run
 force=args.force
 
+target=os.path.expanduser(target)
 symlink_status=collections.defaultdict(lambda: False)
 
 #Set up ignore list regex --- compile all lines into one big regex. If it starts with '/', apply to whole path (^...$)
@@ -111,14 +114,14 @@ def delete_path(path):
     else:
         shutil.rmtree(path)
         
-def get_symlinks():
+def get_symlinks(top_down=True):
     #Visit bottom-up, so if a directory is visited, it must be true that the children has already been processed
     for path in visit_files(source):
         path=os.path.relpath(path,source)
         symlink_status[path]=should_be_symlinked(path)
     
     #Visit top-down --- visit parent first before children
-    for path in visit_files(source,post_order=False):
+    for path in visit_files(source,post_order=not top_down):
         path=os.path.relpath(path,source)
         
         #Guarentees that if a directory is linked, all children would have also been linked
@@ -143,14 +146,21 @@ def install():
         else:
             os.symlink(src,dest)
 
-#Reinstalling a package in a directory it's installed in should give a superset of where the files are installed. So, only remove if they are symlinks that point back to the corresponding file in the package directory
+"""
+It's possible that between installing and uninstalling, files may have been added or removed. So you need to check every file to see if it's a part of the package
+Only remove if they are symlinks that point back to the corresponding file in the package directory
+"""
 def uninstall():
-    for path in get_symlinks():
+    for path in get_symlinks(top_down=False):
         src=path_to_src(path)
         dest=path_to_dest(path)
         if os.path.islink(dest) and os.path.realpath(src)==os.path.realpath(dest):
-            delete_path(dest)
-        
-#To delete, find the directories that would be symlinked and remove them (only if they are links and point to the same location as the file)
-
-install()
+            if dry_run:
+                print("Will delete:",dest)
+            else:
+                delete_path(dest)
+    
+if args.uninstall:
+    uninstall()
+elif args.install:
+    install()
