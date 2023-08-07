@@ -12,7 +12,7 @@ parser.add_argument("-f","--force",help="Force symlink every file and directory.
 args=parser.parse_args()
 
 source=args.source
-print(source)
+
 target=args.target
 dry_run=args.dry_run
 force=args.force
