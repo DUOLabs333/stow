@@ -1,0 +1,151 @@
+#!/bin/python
+import os, re
+import shutil
+import collections
+import argparse
+
+parser=argparse.ArgumentParser(description="Link the contents in SOURCE to TARGET")
+parser.add_argument("source",metavar="SOURCE",help="Directory where contents will be linked from",action='store_const',const=os.getcwd())
+parser.add_argument("-t","--target",help="Directory where contents will be linked to")
+parser.add_argument("-d","--dry-run",help="Don't change filesystem, only print what will happen",action="store_true")
+parser.add_argument("-f","--force",help="Force symlink every file and directory. Do not skip linking for any inode.",action="store_true")
+args=parser.parse_args()
+
+source=args.source
+target=args.target
+dry_run=args.dry_run
+force=args.force
+
+symlink_status=collections.defaultdict(lambda: False)
+
+#Set up ignore list regex --- compile all lines into one big regex. If it starts with '/', apply to whole path (^...$)
+regexes=[line.strip("\n") for line in open(os.path.join(source,".ignore"))]
+regexes.append("/.ignore")
+#regexes=[regexes[0]]
+regexes=[ "^"+_.removeprefix("/")+"$" if _.startswith("/") else _ for _ in regexes]
+regexes='|'.join(regexes)
+regexes=re.compile(regexes)
+
+def get_directory_contents(directory):
+    """ First element is a sentinel, indicating whether list has started being processed """
+    if os.path.isfile(directory):
+        return [False]
+    else:
+        return [False]+[os.path.join(directory,_) for _ in os.listdir(directory)]
+
+#Iterative DFS (to avoid having to increase Python's recursive limit)
+def visit_files(root,post_order=True):
+    Q=[]
+    Q.append((root,get_directory_contents(root)))
+    while len(Q):
+        node,files=Q[-1]
+
+        if regexes.match(os.path.relpath(node,root)):
+            Q.pop()
+            continue
+            
+        if not post_order:
+            if not files[0]: #If the generator hasn't been started yet, so no child has been explored yet
+                yield node
+            if symlink_status[os.path.relpath(node,root)]: #Don't check if children are symlinks if dir is symlink
+                Q.pop()
+                continue
+                
+        if len(files)==1: #All contents have been explored, so the node can be returned
+            if post_order:
+                yield node #Only print if all children has been explored
+            Q.pop()
+            continue
+        
+        #Move to next file in list
+        file=files.pop()
+        Q.append((file,get_directory_contents(file)))
+        files[0]=True #List has started to be explored
+        
+#Recursive version (not used)       
+def get_all_files_1(root,visited=None):
+    if not visited:
+        visited=set()
+    key=hash(os.path.realpath(root))
+    if key in visited:
+        return
+    visited.add(key)
+    if os.path.isdir(root):
+        for _ in os.listdir(root):
+            yield from get_all_files_1(os.path.join(root,_))
+    yield root
+
+def should_be_symlinked(path):
+    """This is always called with the assumption that src exists, but dest may exist"""
+    
+    src=path_to_src(path)
+    dest=path_to_dest(path)
+    if (not os.path.exists(dest)) or (not os.path.exists(os.path.realpath(dest))): #It either doesn't exist, or is a broken symlink, so is free to be copied over
+        return True
+    else:
+        #Files will unconditionally be linked
+        if os.path.isfile(src):
+            return True
+        else:
+            #Directories will only be linked if all files within it will be linked (minimizes symlinks)
+            for _ in os.listdir(dest):
+                file=os.path.join(path,_)
+                if force or (not symlink_status[file]):
+                    return False
+            return True
+
+def path_to_src(path):
+    return os.path.join(source,path)
+
+def path_to_dest(path):
+    return os.path.join(target,path)
+
+def delete_path(path):
+    if os.path.islink(path) or os.path.isfile(path):
+        os.remove(path)
+    else:
+        shutil.rmtree(path)
+        
+def get_symlinks():
+    #Visit bottom-up, so if a directory is visited, it must be true that the children has already been processed
+    for path in visit_files(source):
+        path=os.path.relpath(path,source)
+        symlink_status[path]=should_be_symlinked(path)
+    
+    #Visit top-down --- visit parent first before children
+    for path in visit_files(source,post_order=False):
+        path=os.path.relpath(path,source)
+        
+        #Guarentees that if a directory is linked, all children would have also been linked
+        if symlink_status[path]:
+            yield path
+
+def install():
+    for path in get_symlinks():
+        src=path_to_src(path)
+        dest=path_to_dest(path)
+        try:
+            os.lstat(dest)
+        except:
+            pass
+        else: #File does exist
+            if dry_run:
+                print(f"Will delete: {dest}")
+            else:
+                delete_path(dest)
+        if dry_run:
+            print(f"Will symlink: {src} to {dest}\n")
+        else:
+            os.symlink(src,dest)
+
+#Reinstalling a package in a directory it's installed in should give a superset of where the files are installed. So, only remove if they are symlinks that point back to the corresponding file in the package directory
+def uninstall():
+    for path in get_symlinks():
+        src=path_to_src(path)
+        dest=path_to_dest(path)
+        if os.path.islink(dest) and os.path.realpath(src)==os.path.realpath(dest):
+            delete_path(dest)
+        
+#To delete, find the directories that would be symlinked and remove them (only if they are links and point to the same location as the file)
+
+install()
