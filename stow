@@ -5,13 +5,14 @@ import collections
 import argparse
 
 parser=argparse.ArgumentParser(description="Link the contents in SOURCE to TARGET")
-parser.add_argument("source",metavar="SOURCE",help="Directory where contents will be linked from",action='store_const',const=os.getcwd())
+parser.add_argument("source",metavar="SOURCE",nargs="?",help="Directory where contents will be linked from",default=os.getcwd())
 parser.add_argument("-t","--target",help="Directory where contents will be linked to")
 parser.add_argument("-d","--dry-run",help="Don't change filesystem, only print what will happen",action="store_true")
 parser.add_argument("-f","--force",help="Force symlink every file and directory. Do not skip linking for any inode.",action="store_true")
 args=parser.parse_args()
 
 source=args.source
+print(source)
 target=args.target
 dry_run=args.dry_run
 force=args.force
@@ -19,7 +20,11 @@ force=args.force
 symlink_status=collections.defaultdict(lambda: False)
 
 #Set up ignore list regex --- compile all lines into one big regex. If it starts with '/', apply to whole path (^...$)
-regexes=[line.strip("\n") for line in open(os.path.join(source,".ignore"))]
+if os.path.exists(os.path.join(source,".ignore")):
+	regexes=[line.strip("\n") for line in open(os.path.join(source,".ignore"))]
+else:
+	regexes=[]
+	
 regexes.append("/.ignore")
 #regexes=[regexes[0]]
 regexes=[ "^"+_.removeprefix("/")+"$" if _.startswith("/") else _ for _ in regexes]
