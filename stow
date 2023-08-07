@@ -27,7 +27,7 @@ else:
 	
 regexes.append("/.ignore")
 #regexes=[regexes[0]]
-regexes=[ "^"+_.removeprefix("/")+"$" if _.startswith("/") else _ for _ in regexes]
+regexes=[ "^"+_[1:]+"$" if _.startswith("/") else _ for _ in regexes]
 regexes='|'.join(regexes)
 regexes=re.compile(regexes)
 
