@@ -29,7 +29,7 @@ else:
 	regexes=[]
 	
 regexes.append("/.ignore")
-#regexes=[regexes[0]]
+
 regexes=[ "^"+_[1:]+"$" if _.startswith("/") else _ for _ in regexes]
 regexes='|'.join(regexes)
 regexes=re.compile(regexes)
@@ -88,9 +88,11 @@ def should_be_symlinked(path):
     
     src=path_to_src(path)
     dest=path_to_dest(path)
+
     if (not os.path.exists(dest)) or (not os.path.exists(os.path.realpath(dest))): #It either doesn't exist, or is a broken symlink, so is free to be copied over
         return True
     else:
+        
         #Files will unconditionally be linked
         if os.path.isfile(src):
             return True
@@ -132,6 +134,8 @@ def install():
     for path in get_symlinks():
         src=path_to_src(path)
         dest=path_to_dest(path)
+        if os.path.islink(dest) and os.path.realpath(dest)==os.path.realpath(src): #Optimization, will not symlink something that is already symlink (not put in should_by_symlinked because it SHOULD be symlinked, but we just don't).
+            continue
         try:
             os.lstat(dest)
         except:
