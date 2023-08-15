@@ -24,7 +24,7 @@ symlink_status=collections.defaultdict(lambda: False)
 
 #Set up ignore list regex --- compile all lines into one big regex. If it starts with '/', apply to whole path (^...$)
 if os.path.exists(os.path.join(source,".ignore")):
-	regexes=[line.strip("\n") for line in open(os.path.join(source,".ignore"))]
+	regexes=[line.strip("\n") for line in open(os.path.join(source,".ignore")) if line!="\n"]
 else:
 	regexes=[]
 	
@@ -100,7 +100,9 @@ def should_be_symlinked(path):
             #Directories will only be linked if all files within it will be linked (minimizes symlinks)
             for _ in os.listdir(dest):
                 file=os.path.join(path,_)
-                if force or (not symlink_status[file]):
+                if force: #Directory will be symlinked regardless if -f is passed
+                    continue
+                if (not symlink_status[file]):
                     return False
             return True
 
@@ -134,8 +136,9 @@ def install():
     for path in get_symlinks():
         src=path_to_src(path)
         dest=path_to_dest(path)
-        if os.path.islink(dest) and os.path.realpath(dest)==os.path.realpath(src): #Optimization, will not symlink something that is already symlink (not put in should_by_symlinked because it SHOULD be symlinked, but we just don't).
+        if os.path.realpath(dest)==os.path.realpath(src): #If dest is a symlink, we optimize by not relinking it (this condition is not put in should_be_symlinked as it SHOULD be symlinked, but we just don't). If dest is not a symlink, we should not symlink over src. Either way, if both src and dest point to the same file, we should not symlink over dest.
             continue
+
         try:
             os.lstat(dest)
         except:
