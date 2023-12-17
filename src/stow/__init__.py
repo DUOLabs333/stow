@@ -24,14 +24,14 @@ include=config.get("include",["*"]) #By default, get everything
 parent_dirs=[]
 
 for path in include:
-    curr=Path(path)
+    curr=Path(path).parent
     while True:
-        if os.path.sep not in str(curr):
+        if str(curr)==".":
             break
+            
+        parent_dirs.append(str(curr))
         
         curr=curr.parent
-        
-        parent_dirs.append(str(curr))
 
 command.extend([f"--include={_+os.path.sep}" for _ in parent_dirs])
 command.extend([f"--include={_}" for _ in include])
