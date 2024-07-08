@@ -1,6 +1,3 @@
-#rsync -aP --delete --include="bottom/*" --include="bottom/" --include="kitty/*" --exclude="*" system.ssh:~/Repos/dotfiles/.config/ .
-#Include will get all parent directories and add them as seperate include+'/' (the host directory must also have the end slash). Exclude will always go before include (but the --exclude="*" will go at the end)
-
 import subprocess
 import json
 import argparse
@@ -15,6 +12,22 @@ args=parser.parse_args()
 config=json.load(open(os.path.abspath(args.file),"r"))
 
 command=["rsync","-aP","--delete"]
+
+raw_patterns=config.get("raw_patterns", [])
+
+gitignore=config.get("gitignore", {})
+
+gitignore_enable=gitignore.get("enable", False)
+
+if gitignore_enable:
+    gitignore_prepend=gitignore.get("prepend", [])
+    gitignore_append=config.get("append", [])
+
+    raw_patterns.extend(gitignore_prepend+open(os.path.join(config["localDir"],".gitignore"),"r").read().splitlines()+gitignore_append)
+
+
+if raw_patterns:
+    command.extend([f"--{'include' if _[0]=='!' else 'exclude'}={_}{'*' if _.endswith(os.path.sep) else ''}" for _ in raw_patterns])
 
 exclude=config.get("exclude",[])
 command.extend([f"--exclude={_}" for _ in exclude])
@@ -45,6 +58,6 @@ if args.dry_run:
 command.append(f'{config["remoteHost"]}:{remoteDir+os.path.sep}')
 command.append(".")
 
-print(command)
 def main():
     subprocess.run(command,cwd=os.path.expanduser(config["localDir"]))
+    print(command)
