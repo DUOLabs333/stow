@@ -23,6 +23,8 @@ if gitignore_enable:
     gitignore_prepend=gitignore.get("prepend", [])
     gitignore_append=config.get("append", [])
 
+    gitignore_append.extend(["*.o","*.a","*.so", "Sync.json", "*.pyc"])
+
     raw_patterns.extend(gitignore_prepend+open(os.path.join(config["localDir"],".gitignore"),"r").read().splitlines()+gitignore_append)
 
 
