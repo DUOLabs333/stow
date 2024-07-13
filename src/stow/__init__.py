@@ -29,12 +29,13 @@ if gitignore_enable:
 
 
 if raw_patterns:
-    command.extend([f"--{'include' if _[0]=='!' else 'exclude'}={_}{'*' if _.endswith(os.path.sep) else ''}" for _ in raw_patterns])
+    command.extend([f"--{'include' if _[0]=='!' else 'exclude'}={_.removeprefix('!')}{'*' if _.endswith(os.path.sep) else ''}" for _ in raw_patterns])
 
 exclude=config.get("exclude",[])
 command.extend([f"--exclude={_}" for _ in exclude])
 
 include=config.get("include",["*"]) #By default, get everything
+include=[_+('*' if _.endswith(os.path.sep) else '') for _ in include ]
 
 parent_dirs=[]
 
